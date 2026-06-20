@@ -15,6 +15,10 @@ interface PreviewData {
   segments: RouteSegment[];
   sourceType: "pdf" | "url" | "form" | "free_text";
   sourceReference: string | null;
+  /** Raw text the model actually saw, before extraction. Only present for
+   * pdf/url sources — useful for telling apart "the model misread good
+   * text" from "the model correctly read bad/garbled text." */
+  rawText?: string;
 }
 
 // Shape returned by the /api/extract/* endpoints, before normalization
@@ -49,6 +53,7 @@ interface ExtractApiResponse {
   segments: ExtractApiSegment[];
   sourceType: "pdf" | "url" | "form" | "free_text";
   sourceReference: string | null;
+  rawText?: string;
 }
 
 interface ApiErrorResponse {
@@ -117,18 +122,19 @@ export function IngestTool() {
       })),
       sourceType: data.sourceType,
       sourceReference: data.sourceReference,
+      rawText: data.rawText,
     };
   }
 
-  async function runExtraction(endpoint: string, body: BodyInit, isJson: boolean) {
+  async function runExtraction(endpoint: string, jsonBody: string) {
     setLoading(true);
     setError(null);
     setPreview(null);
     try {
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: isJson ? { "Content-Type": "application/json" } : undefined,
-        body,
+        headers: { "Content-Type": "application/json" },
+        body: jsonBody,
       });
       const data: ExtractApiResponse | ApiErrorResponse = await res.json();
       if (!res.ok) {
@@ -142,14 +148,56 @@ export function IngestTool() {
     }
   }
 
-  function handlePdfSubmit() {
+  // Client-side mirror of the server's MAX_FILE_SIZE_BYTES in
+  // api/extract/pdf/route.ts — gives instant feedback instead of waiting
+  // on a round trip just to be told the file is too large.
+  const MAX_PDF_SIZE_BYTES = 15 * 1024 * 1024;
+
+  function readFileAsBase64(targetFile: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        // result is a data URI ("data:application/pdf;base64,...."); the
+        // server strips this prefix too, but stripping here keeps the
+        // payload a bit smaller and the intent explicit.
+        const base64 = result.includes(",") ? result.split(",")[1] : result;
+        resolve(base64);
+      };
+      reader.onerror = () => reject(new Error("Could not read the file"));
+      reader.readAsDataURL(targetFile);
+    });
+  }
+
+  async function handlePdfSubmit() {
     if (!file) {
       setError("Choose a PDF file first.");
       return;
     }
-    const fd = new FormData();
-    fd.append("file", file);
-    runExtraction("/api/extract/pdf", fd, false);
+    if (file.size > MAX_PDF_SIZE_BYTES) {
+      setError(
+        `PDF is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum supported size is ${MAX_PDF_SIZE_BYTES / 1024 / 1024}MB.`
+      );
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+    let fileBase64: string;
+    try {
+      fileBase64 = await readFileAsBase64(file);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not read the file");
+      setLoading(false);
+      return;
+    }
+
+    // runExtraction manages its own loading/error state from here, including
+    // turning loading back off in its finally block.
+    await runExtraction(
+      "/api/extract/pdf",
+      JSON.stringify({ fileName: file.name, fileBase64 })
+    );
   }
 
   function handleUrlSubmit() {
@@ -157,7 +205,7 @@ export function IngestTool() {
       setError("Enter a URL first.");
       return;
     }
-    runExtraction("/api/extract/url", JSON.stringify({ url }), true);
+    runExtraction("/api/extract/url", JSON.stringify({ url }));
   }
 
   function handleTextSubmit() {
@@ -165,7 +213,7 @@ export function IngestTool() {
       setError("Add a bit more detail about the trip.");
       return;
     }
-    runExtraction("/api/extract/text", JSON.stringify({ text: freeText }), true);
+    runExtraction("/api/extract/text", JSON.stringify({ text: freeText }));
   }
 
   function handleFormSubmit() {
@@ -175,8 +223,7 @@ export function IngestTool() {
     }
     runExtraction(
       "/api/extract/form",
-      JSON.stringify({ title: formTitle, summary: formSummary, stops: formStops }),
-      true
+      JSON.stringify({ title: formTitle, summary: formSummary, stops: formStops })
     );
   }
 
@@ -442,6 +489,24 @@ export function IngestTool() {
                   ))}
                 </ul>
               </div>
+            )}
+            {preview.rawText && (
+              <details className="border border-sage-700/30 rounded-md group">
+                <summary className="eyebrow text-sage-500 px-3 py-2.5 cursor-pointer hover:text-sage-300 select-none list-none flex items-center gap-2">
+                  <span className="inline-block transition-transform group-open:rotate-90">▸</span>
+                  Show text the model read
+                </summary>
+                <div className="px-3 pb-3">
+                  <p className="text-xs text-sage-500 mb-2">
+                    This is what extraction actually saw, before it ran. If a stop is
+                    missing or wrong here, check this first — a wrong result over correct
+                    text is a different problem than a correct result over garbled text.
+                  </p>
+                  <pre className="text-xs text-sage-400 bg-bush-950 border border-sage-700/20 rounded p-3 max-h-64 overflow-y-auto whitespace-pre-wrap font-mono">
+                    {preview.rawText}
+                  </pre>
+                </div>
+              </details>
             )}
             <button
               onClick={handlePublish}

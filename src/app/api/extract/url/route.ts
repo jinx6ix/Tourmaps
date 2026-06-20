@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
       segments,
       sourceType: "url" as const,
       sourceReference: url,
+      rawText: rawText.slice(0, 20000),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Extraction failed";

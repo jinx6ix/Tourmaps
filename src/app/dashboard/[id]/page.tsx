@@ -8,9 +8,10 @@ import { getRouteById } from "@/lib/data/routes";
 export default async function RouteDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const route = await getRouteById(params.id);
+  const { id } = await params;
+  const route = await getRouteById(id);
   if (!route) notFound();
 
   return (

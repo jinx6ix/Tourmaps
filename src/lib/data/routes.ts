@@ -53,7 +53,7 @@ function mapRouteRow(row: RouteRow): Route {
 export async function getPublishedRouteBySlug(
   slug: string
 ): Promise<RouteWithStops | null> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: routeRow } = await supabase
     .from("routes")
@@ -83,7 +83,7 @@ export async function getPublishedRouteBySlug(
 
 /** Fetches any route (any status) by id, for staff preview/edit views. */
 export async function getRouteById(id: string): Promise<RouteWithStops | null> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: routeRow } = await supabase
     .from("routes")
@@ -112,7 +112,7 @@ export async function getRouteById(id: string): Promise<RouteWithStops | null> {
 
 /** Lists all routes for the staff dashboard, most recently updated first. */
 export async function listRoutesForStaff(): Promise<Route[]> {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data } = await supabase
     .from("routes")
     .select("*")

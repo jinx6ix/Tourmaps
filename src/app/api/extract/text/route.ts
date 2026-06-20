@@ -6,7 +6,7 @@ import { resolveStopCoordinates, computeRouteSegments } from "@/lib/pipeline";
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

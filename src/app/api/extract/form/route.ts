@@ -6,7 +6,7 @@ import type { ManualStopInput } from "@/types/itinerary";
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

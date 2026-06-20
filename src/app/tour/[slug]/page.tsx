@@ -15,9 +15,10 @@ const TYPE_LABEL: Record<StopType, string> = {
 export default async function TourDetailPage({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }) {
-  const route = await getPublishedRouteBySlug(params.slug);
+  const { slug } = await params;
+  const route = await getPublishedRouteBySlug(slug);
   if (!route) notFound();
 
   const sortedStops = [...route.stops].sort(

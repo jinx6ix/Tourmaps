@@ -6,6 +6,7 @@ import { ExpeditionMap } from "@/components/map/ExpeditionMap";
 import type { Stop, RouteSegment, StopType, ManualStopInput } from "@/types/itinerary";
 
 type Tab = "pdf" | "url" | "form" | "text";
+type SaveMode = "draft" | "publish";
 
 interface PreviewData {
   title: string;
@@ -227,7 +228,7 @@ export function IngestTool() {
     );
   }
 
-  async function handlePublish() {
+  async function handleSave(mode: SaveMode) {
     if (!preview) return;
     setPublishing(true);
     setError(null);
@@ -261,9 +262,19 @@ export function IngestTool() {
           sourceReference: preview.sourceReference,
         }),
       });
-      const data: { routeId: string } | ApiErrorResponse = await res.json();
+      const data: { routeId: string; slug?: string } | ApiErrorResponse = await res.json();
       if (!res.ok) throw new Error((data as ApiErrorResponse).error || "Failed to save route");
-      router.push(`/dashboard/${(data as { routeId: string }).routeId}`);
+
+      const { routeId, slug } = data as { routeId: string; slug?: string };
+
+      if (mode === "publish") {
+        const publishRes = await fetch(`/api/routes/${routeId}/publish`, { method: "POST" });
+        const publishData: { slug: string } | ApiErrorResponse = await publishRes.json();
+        if (!publishRes.ok) throw new Error((publishData as ApiErrorResponse).error || "Failed to publish route");
+        router.push(`/tour/${(publishData as { slug: string }).slug}`);
+      } else {
+        router.push(`/dashboard/${routeId}`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save route");
     } finally {
@@ -508,13 +519,22 @@ export function IngestTool() {
                 </div>
               </details>
             )}
-            <button
-              onClick={handlePublish}
-              disabled={publishing}
-              className="w-full px-5 py-3 bg-gold-500 hover:bg-gold-400 disabled:opacity-50 text-bush-950 font-medium rounded-md transition-colors"
-            >
-              {publishing ? "Saving…" : "Save as draft"}
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleSave("draft")}
+                disabled={publishing}
+                className="flex-1 px-5 py-3 border border-sage-600 hover:border-sage-500 disabled:opacity-50 text-sage-300 font-medium rounded-md transition-colors"
+              >
+                {publishing ? "Saving…" : "Save as draft"}
+              </button>
+              <button
+                onClick={() => handleSave("publish")}
+                disabled={publishing}
+                className="flex-1 px-5 py-3 bg-gold-500 hover:bg-gold-400 disabled:opacity-50 text-bush-950 font-medium rounded-md transition-colors"
+              >
+                {publishing ? "Saving…" : "Save & publish"}
+              </button>
+            </div>
           </div>
         )}
       </div>
